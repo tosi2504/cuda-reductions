@@ -1,2 +1,2 @@
 all:
-	nvcc sources/main.cu sources/kernels.cu -O3 -o out
+	nvcc sources/main.cu -O3 -o out
