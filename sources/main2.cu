@@ -17,7 +17,7 @@ int main () {
 
 	// set the parallelisation parameters
 	const int numThreadsPerBlock = 256;
-    const int n = 2<<22;
+    const int n = 2<<26;
     std::cout << n << std::endl;
 	const int N = ROUND_UP(n, 2*numThreadsPerBlock); // NOTE: for kernels 0,1,2 dont need the 2*...
     std::cout << N << std::endl;
