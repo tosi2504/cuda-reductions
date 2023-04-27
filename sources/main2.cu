@@ -2,6 +2,7 @@
 #include <iostream>
 #include <random>
 #include <chrono>
+#include <stdint.h>
 
  
 
@@ -14,13 +15,13 @@ int main () {
     
     // set the datatype
     typedef int datatype;
+    std::cout << "datatype has " << sizeof(int64_t) << " bytes" << std::endl;
 
 	// set the parallelisation parameters
 	const int numThreadsPerBlock = 256;
-    const int n = 2<<26;
-    std::cout << n << std::endl;
-	const int N = ROUND_UP(n, 2*numThreadsPerBlock); // NOTE: for kernels 0,1,2 dont need the 2*...
-    std::cout << N << std::endl;
+    const int numElementsPerThread = 4; // for kernel 6
+    const int n = 2<<27;
+	const int N = ROUND_UP(n, numElementsPerThread*2*numThreadsPerBlock); // NOTE: for kernels 0,1,2 dont need the 2*...
 
 	// allocate memory on host for input and output
 	datatype * h_in = (datatype*)malloc(sizeof(datatype)*N);
@@ -31,8 +32,8 @@ int main () {
 	//std::uniform_real_distribution<double> dist(0,1); 
 	std::uniform_int_distribution<> dist(0,10); 
 	for (int i = 0; i < n; ++i) {
-		h_in[i] = dist(rng);
-		//h_in[i] = 1;
+		//h_in[i] = dist(rng);
+		h_in[i] = 1;
 	}
 	for (int i = n; i < N; ++i) {
 		h_in[i] = 0;
@@ -43,10 +44,11 @@ int main () {
 	CCE(cudaMalloc(&d_in, sizeof(datatype)*N));
 	CCE(cudaMemcpy(d_in, h_in, sizeof(datatype)*N, cudaMemcpyHostToDevice));
     int numBlocks1 = DIV_UP(N, numThreadsPerBlock);
-	CCE(cudaMalloc(&d_temp1, sizeof(datatype)*ROUND_UP(numBlocks1, 2*numThreadsPerBlock))); // does not need to be initialized
+    std::cout << numElementsPerThread*2*numThreadsPerBlock << std::endl;
+	CCE(cudaMalloc(&d_temp1, sizeof(datatype)*ROUND_UP(numBlocks1, numElementsPerThread*2*numThreadsPerBlock))); // does not need to be initialized
     // NOTE: 2* is not required for kernels 0,1,2
     int numBlocks2 = DIV_UP(numBlocks1, numThreadsPerBlock);
-	CCE(cudaMalloc(&d_temp2, sizeof(datatype)*ROUND_UP(numBlocks2, 2*numThreadsPerBlock))); // does not need to be initialized
+	CCE(cudaMalloc(&d_temp2, sizeof(datatype)*ROUND_UP(numBlocks2, numElementsPerThread*2*numThreadsPerBlock))); // does not need to be initialized
     // NOTE: 2* is not required for kernels 0,1,2
 
 	// benchmark the kernel
@@ -136,10 +138,26 @@ int main () {
 	CCE(cudaMemcpy(h_out, d_out, sizeof(datatype), cudaMemcpyDeviceToHost));
 	std::cout << "Result for total reduction: " << h_out[0] << std::endl;
 
+    // kernel 6
+    std::cout << "benchmarking kernel 6" << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    for (unsigned int i = 0; i < numCycles; ++i) {
+        wrapperKer_6 < datatype , numThreadsPerBlock > (d_in, d_temp1, d_temp2, &d_out, N, numThreadsPerBlock, numElementsPerThread);
+        cudaDeviceSynchronize();
+    }
+    stop = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(stop-start);
+	std::cout << "kernel 6 took " << duration.count()/(double)numCycles << " us" << std::endl;
+	CCEL();
+	CCE(cudaMemcpy(h_out, d_out, sizeof(datatype), cudaMemcpyDeviceToHost));
+	std::cout << "Result for total reduction: " << h_out[0] << std::endl;
+
+
     cudaFree(d_in);
     cudaFree(d_out);
     cudaFree(d_temp1);
     cudaFree(d_temp2);
     free(h_in);
     free(h_out);
+    CCEL();
 }
